@@ -2474,6 +2474,7 @@ static struct proto tun_proto = {
 
 static int tun_flags(struct tun_struct *tun)
 {
+	return tun->flags & (TUN_FEATURES | IFF_PERSIST | IFF_TUN | IFF_TAP | IFF_META_HDR);
 }
 
 static ssize_t tun_show_flags(struct device *dev, struct device_attribute *attr,
