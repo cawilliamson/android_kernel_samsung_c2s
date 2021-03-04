@@ -1247,6 +1247,7 @@ static void gc_worker(struct work_struct *work)
 				expired_count++;
 				continue;
 			}
+
 			if (nf_conntrack_max95 == 0 || gc_worker_skip_ct(tmp))
 				continue;
 
@@ -1308,6 +1309,7 @@ static void gc_worker(struct work_struct *work)
 		gc_work->next_gc_run += min_interval;
 		if (gc_work->next_gc_run > max)
 			gc_work->next_gc_run = max;
+	}
 
 	next_run = gc_work->next_gc_run;
 	gc_work->last_bucket = i;

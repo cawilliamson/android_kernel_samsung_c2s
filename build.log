@@ -1,0 +1,1 @@
+zsh: ./build_kernel.sh: bad interpreter: /bin/bash: no such file or directory
