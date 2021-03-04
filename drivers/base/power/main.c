@@ -720,6 +720,10 @@ void dpm_noirq_resume_devices(pm_message_t state)
 	struct device *dev;
 	ktime_t starttime = ktime_get();
 
+#ifdef CONFIG_BOEFFLA_WL_BLOCKER
+	pm_print_active_wakeup_sources();
+#endif
+
 	trace_suspend_resume(TPS("dpm_resume_noirq"), state.event, true);
 	dbg_snapshot_suspend("dpm_resume_noirq", dpm_noirq_resume_devices,
 				NULL, state.event, DSS_FLAG_IN);
