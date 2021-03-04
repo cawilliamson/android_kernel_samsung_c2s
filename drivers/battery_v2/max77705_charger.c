@@ -47,6 +47,7 @@ static enum power_supply_property max77705_charger_props[] = {
 
 static enum power_supply_property max77705_otg_props[] = {
 	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 };
 
 static struct device_attribute max77705_charger_attrs[] = {
@@ -246,7 +247,7 @@ static void max77705_set_float_voltage(struct max77705_charger_data *charger,
 
 #if defined(CONFIG_SEC_FACTORY)
 	if (factory_mode) {
-		float_voltage = 3800;
+		float_voltage = charger->pdata->float_voltage_in_factory;
 		pr_info("%s: Factory Mode Skip set float voltage(%d)\n", __func__, float_voltage);
 		// do not return here
 	}
@@ -405,10 +406,16 @@ static int max77705_get_charging_health(struct max77705_charger_data *charger)
 			charger->misalign_cnt = 0;
 
 		if (charger->misalign_cnt >= 3) {
-			pr_info("%s: invalid WCIN, Misalign occurs!\n", __func__);
-			value.intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
-			psy_do_property(charger->pdata->wireless_charger_name,
-				set, POWER_SUPPLY_PROP_STATUS, value);
+			psy_do_property("battery",
+				get, POWER_SUPPLY_PROP_STATUS, value);
+			if (value.intval != POWER_SUPPLY_STATUS_FULL) {
+				pr_info("%s: invalid WCIN, Misalign occurs!\n", __func__);
+				value.intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
+				psy_do_property(charger->pdata->wireless_charger_name,
+					set, POWER_SUPPLY_PROP_STATUS, value);
+			} else {
+				charger->misalign_cnt = 0;
+			}
 		}
 	}
 
@@ -821,6 +828,12 @@ static int max77705_set_otg(struct max77705_charger_data *charger, int enable)
 	/* CHGIN-OTG */
 	value.intval = enable;
 	charger->otg_on = enable;
+	
+	/* otg current limit 900mA */
+	max77705_update_reg(charger->i2c, MAX77705_CHG_REG_CNFG_02,
+			MAX77705_OTG_ILIM_900 << CHG_CNFG_02_OTG_ILIM_SHIFT,
+			CHG_CNFG_02_OTG_ILIM_MASK);
+			
 	if (enable) {
 		psy_do_property("wireless", set,
 			POWER_SUPPLY_PROP_CHARGE_OTG_CONTROL, value);
@@ -1155,9 +1168,11 @@ static void max77705_set_uno(struct max77705_charger_data *charger, int en)
 				MAX77705_CHG_IM | MAX77705_CHGIN_IM,
 				MAX77705_CHG_IM | MAX77705_CHGIN_IM | MAX77705_BYP_IM);
 
+		mutex_lock(&charger->mode_mutex);
 		charger->cnfg00_mode = MAX77705_MODE_8_BOOST_UNO_ON;
 		max77705_update_reg(charger->i2c, MAX77705_CHG_REG_CNFG_00,
 				charger->cnfg00_mode, CHG_CNFG_00_MODE_MASK);
+		mutex_unlock(&charger->mode_mutex);
 	} else if (en == SEC_BAT_CHG_MODE_CHARGING_OFF) {
 		charger->uno_on = true;
 		max77705_read_reg(charger->i2c, MAX77705_CHG_REG_INT_MASK,
@@ -1775,6 +1790,8 @@ static int max77705_otg_get_property(struct power_supply *psy,
 		val->intval = charger->otg_on;
 		mutex_unlock(&charger->charger_mutex);
 		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -1815,6 +1832,21 @@ static int max77705_otg_set_property(struct power_supply *psy,
 		} else {
 			pr_info("%s : max77705_set_otg skip, mfc_fw_update(%d)\n",
 				__func__, mfc_fw_update);
+		}
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		pr_info("POWER_SUPPLY_PROP_VOLTAGE_MAX - %s\n", (val->intval) ? "ON" : "OFF");
+
+		if (val->intval) {
+			/* otg current limit 1500mA */
+			max77705_update_reg(charger->i2c, MAX77705_CHG_REG_CNFG_02,
+					MAX77705_OTG_ILIM_1500 << CHG_CNFG_02_OTG_ILIM_SHIFT,
+					CHG_CNFG_02_OTG_ILIM_MASK);
+		} else {
+			/* otg current limit 900mA */
+			max77705_update_reg(charger->i2c, MAX77705_CHG_REG_CNFG_02,
+					MAX77705_OTG_ILIM_900 << CHG_CNFG_02_OTG_ILIM_SHIFT,
+					CHG_CNFG_02_OTG_ILIM_MASK);
 		}
 		break;
 	default:
@@ -2287,11 +2319,19 @@ static void max77705_wc_current_work(struct work_struct *work)
 				POWER_SUPPLY_PROP_INPUT_VOLTAGE_REGULATION, value);
 		wake_unlock(&charger->wc_current_wake_lock);
 	} else {
-		diff_current = charger->wc_pre_current - charger->wc_current;
-		diff_current = (diff_current > WC_CURRENT_STEP) ? WC_CURRENT_STEP :
-			((diff_current < -WC_CURRENT_STEP) ? -WC_CURRENT_STEP : diff_current);
-
-		charger->wc_pre_current -= diff_current;
+		if (charger->wc_pre_current > charger->wc_current) {
+			diff_current = charger->wc_pre_current - charger->wc_current;
+			if (diff_current < charger->pdata->wc_current_step)
+				charger->wc_pre_current -= diff_current;
+			else
+				charger->wc_pre_current -= charger->pdata->wc_current_step;
+		} else {
+			diff_current = charger->wc_current - charger->wc_pre_current;
+			if (diff_current < charger->pdata->wc_current_step)
+				charger->wc_pre_current += diff_current;
+			else
+				charger->wc_pre_current += charger->pdata->wc_current_step;
+		}
 		max77705_set_input_current(charger, charger->wc_pre_current);
 		queue_delayed_work(charger->wqueue, &charger->wc_current_work,
 				   msecs_to_jiffies(WC_CURRENT_WORK_STEP));
@@ -2395,6 +2435,21 @@ static int max77705_charger_parse_dt(struct max77705_charger_data *charger)
 			else
 				max77705_set_snkcap(charger->snkcap_data, len);
 		}
+
+		ret = of_property_read_u32(np, "battery,float_voltage_in_factory",
+			&pdata->float_voltage_in_factory);
+		if (ret) {
+			pr_info("%s: float_voltage_in_factory is Empty\n", __func__);
+			pdata->float_voltage_in_factory = 3800;
+		}
+
+		ret = of_property_read_u32(np, "battery,wc_current_step",
+					   &pdata->wc_current_step);
+		if (ret) {
+			pr_info("%s: battery,wc_current_step is Empty\n", __func__);
+			pdata->wc_current_step = WC_CURRENT_STEP; /* default 100mA */
+		}
+		pr_info("%s: battery,wc_current_step is %d\n", __func__, pdata->wc_current_step);
 	}
 
 	np = of_find_node_by_name(NULL, "max77705-fuelgauge");

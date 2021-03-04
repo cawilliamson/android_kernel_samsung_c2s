@@ -69,6 +69,9 @@
 #include <asm/tlb.h>
 
 #include <trace/events/task.h>
+#ifdef CONFIG_KDP_NS
+#include "mount.h"
+#endif
 #include "internal.h"
 
 #include <trace/events/sched.h>
@@ -82,20 +85,6 @@
 #ifdef CONFIG_LOD_SEC
 #define rkp_is_lod(x) ((x->cred->type)>>3 & 1)
 #endif
-static unsigned int __is_kdp_recovery __kdp_ro;
-
-static int __init boot_recovery(char *str)
-{
-	int temp = 0;
-
-	if (get_option(&str, &temp)) {
-		__is_kdp_recovery = temp;
-		return 0;
-	}
-
-	return -EINVAL;
-}
-early_param("androidboot.boot_recovery", boot_recovery);
 #endif
 
 int suid_dumpable = 0;
@@ -1275,11 +1264,13 @@ void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
 	perf_event_comm(tsk, exec);
 }
 #ifdef CONFIG_KDP_NS
+extern int rkp_from_vfsmnt_cache(unsigned long addr);
 extern struct super_block *sys_sb;	/* pointer to superblock */
 extern struct super_block *odm_sb;	/* pointer to superblock */
 extern struct super_block *vendor_sb;	/* pointer to superblock */
 extern struct super_block *rootfs_sb;	/* pointer to superblock */
 extern struct super_block *art_sb;	/* pointer to superblock */
+extern int __is_kdp_recovery;
 extern int __check_verifiedboot;
 static int kdp_check_sb_mismatch(struct super_block *sb) 
 {	
@@ -1293,6 +1284,44 @@ static int kdp_check_sb_mismatch(struct super_block *sb)
 	return 0;
 }
 
+static int kdp_check_path_mismatch(struct vfsmount *vfsmnt)
+{
+	int i = 0;
+	int ret = -1;
+	char *buf = NULL;
+	char *path_name = NULL;
+	const char* skip_path[] = {
+		"/com.android.runtime",
+		"/com.android.conscrypt",
+		"/com.android.art",
+		"/com.android.adbd",
+	};
+
+	if (!vfsmnt->bp_mount) {
+		printk(KERN_ERR "vfsmnt->bp_mount is NULL");
+		return -ENOMEM;
+	}
+
+	buf = kzalloc(PATH_MAX, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	path_name = dentry_path_raw(vfsmnt->bp_mount->mnt_mountpoint, buf, PATH_MAX);
+	if (IS_ERR(path_name))
+		goto out;
+
+	for (; i < ARRAY_SIZE(skip_path); ++i) {
+		if (!strncmp(path_name, skip_path[i], strlen(skip_path[i]))) {
+			ret = 0;
+			break;
+		}
+	}
+out:
+	kfree(buf);
+
+	return ret;
+}
+
 static int invalid_drive(struct linux_binprm * bprm) 
 {
 	struct super_block *sb =  NULL;
@@ -1300,13 +1329,18 @@ static int invalid_drive(struct linux_binprm * bprm)
 	
 	vfsmnt = bprm->file->f_path.mnt;
 #ifdef CONFIG_FASTUH_RKP
-	if(!vfsmnt) {
+	if(!vfsmnt || !rkp_from_vfsmnt_cache((unsigned long)vfsmnt)) {
 #else
 	if(!vfsmnt || !rkp_ro_page((unsigned long)vfsmnt)) {
 #endif
 		printk("\nInvalid Drive #%s# #%p#\n",bprm->filename, vfsmnt);
 		return 1;
-	} 
+	}
+
+	if (!kdp_check_path_mismatch(vfsmnt)) {
+		return 0;
+	}
+
 	sb = vfsmnt->mnt_sb;
 
 	if(kdp_check_sb_mismatch(sb)) {
@@ -1364,7 +1398,7 @@ int flush_old_exec(struct linux_binprm * bprm)
 	if(rkp_cred_enable &&
 		is_kdp_priv_task() && 
 		invalid_drive(bprm)) {
-		//panic("\n KDP_NS: Illegal Execution of file #%s#\n", bprm->filename);
+		panic("\n KDP_NS: Illegal Execution of file #%s#\n", bprm->filename);
 	}
 #endif 
 	retval = exec_mmap(bprm->mm);

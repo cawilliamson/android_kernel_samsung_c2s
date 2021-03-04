@@ -424,6 +424,7 @@ enum capture_state {
 	CAPTURE_STATE_ZSL_LIKE = 20,
 	CAPTURE_STATE_STREAM_ON_CAPTURE = 30,
 	CAPTURE_STATE_RAW_CAPTURE = 100,
+	CAPTURE_STATE_VIDEO_RECORD_CHANGE_FPS = 200,
 };
 
 enum flash_info_available {
@@ -860,6 +861,14 @@ enum aa_capture_intent {
     AA_CAPTURE_INTENT_STILL_CAPTURE_PROCESSED_REMOSAIC_MFHDR_DYNAMIC_SHOT   = 129,
     AA_CAPTURE_INTENT_STILL_CAPTURE_PROCESSED_REMOSAIC_SINGLE_FLASH         = 130,
     AA_CAPTURE_INTENT_STILL_CAPTURE_AIF_DYNAMIC_SHOT                        = 131,
+    AA_CAPTURE_INTENT_STILL_CAPTURE_GFHDR_DYNAMIC_SHOT                      = 132,
+    AA_CAPTURE_INTENT_STILL_CAPTURE_SUPER_NIGHT_SHOT_EXTREME_DARK           = 133,
+    AA_CAPTURE_INTENT_STILL_CAPTURE_SUPER_NIGHT_SHOT_HANDHELD_MAX           = 134,
+    AA_CAPTURE_INTENT_STILL_CAPTURE_SUPER_NIGHT_SHOT_TRIPOD_MAX             = 135,
+    AA_CAPTURE_INTENT_STILL_CAPTURE_SUPER_NIGHT_SHOT_EXTREME_DARK_MAX       = 136,
+    AA_CAPTURE_INTENT_STILL_CAPTURE_SR_HDR_DYNAMIC_SHOT                     = 137,
+
+    AA_CAPTURE_INTENT_VIDEO_RECORD_CHANGE_FPS          = 500,
 
     AA_CAPTURE_INTENT_STILL_CAPTURE_SPORT_MOTIONLEVEL0 = 90000,
     AA_CAPTURE_INTENT_STILL_CAPTURE_SPORT_MOTIONLEVEL1 = 90001,
@@ -1234,6 +1243,23 @@ enum aa_control_ssrm_hint {
 	AA_SSRM_HINT_LOW_POWER_MODE_L3 = 1 << 2,
 };
 
+enum aa_ae_extra_mode {
+	AA_AE_EXTRA_MODE_AUTO             = 0,
+	AA_AE_EXTRA_MODE_SHUTTER_PRIORITY = 1,
+	AA_AE_EXTRA_MODE_ISO_PRIORITY     = 2,
+};
+
+enum aa_dynamic_bds_mode {
+	AA_DYNAMIC_BDS_MODE_OFF = 0,
+	AA_DYNAMIC_BDS_MODE_LOW_LIGHT_ON = 1,   /* IQ controlled */
+	AA_DYNAMIC_BDS_MODE_SYSTEM_ON  = 2,     /* HAL controlled */
+};
+
+enum aa_transient_capture_action {
+	AA_TRANSIENT_CAPTURE_ACTION_OFF = 0,
+	AA_TRANSIENT_CAPTURE_ACTION_FAST_CAPTURE = 1,
+};
+
 struct camera2_video_output_size {
 	uint16_t			width;
 	uint16_t			height;
@@ -1303,7 +1329,10 @@ struct camera2_aa_ctl {
 	enum aa_short_ref_hdr_mode	vendor_shortRefHdrEnable;
 	int32_t				vendor_memTotal;
 	struct depth_info		vendor_depthInfo;
-	uint32_t			vendor_reserved[31];
+	enum aa_ae_extra_mode		vendor_aeExtraMode;
+	enum aa_dynamic_bds_mode		vendor_enableDynamicBds;
+	enum aa_transient_capture_action	vendor_transientCaptureAction;
+	uint32_t			vendor_reserved[28];
 };
 
 struct aa_apexInfo {
@@ -1409,7 +1438,9 @@ struct camera2_aa_dm {
 	int32_t				vendor_dynamicShotCaptureDuration;
 	int32_t				vendor_aeBracketingFpsHint;
 	struct oisHallInfo		vendor_oisHallData;
-	uint32_t			vendor_reserved[39];
+	int32_t				vendor_fpsHint;
+	enum aa_dynamic_bds_mode		vendor_dynamicBdsInfo;
+	uint32_t			vendor_reserved[37];
 
 	// For dual
 	uint32_t			vendor_wideTeleConvEv;
@@ -1926,6 +1957,7 @@ enum camera2_wdr_mode {
 	CAMERA_WDR_ON = 2,
 	CAMERA_WDR_AUTO = 3,
 	CAMERA_WDR_AUTO_LIKE = 4,
+	CAMERA_WDR_AUTO_3P = 5,
 	TOTALCOUNT_CAMERA_WDR,
 	CAMERA_WDR_UNKNOWN,
 };
@@ -1960,6 +1992,7 @@ enum camera_op_mode {
 	CAMERA_OP_MODE_HAL3_SDK,
 	CAMERA_OP_MODE_HAL3_CAMERAX,
 	CAMERA_OP_MODE_HAL3_AVSP,
+	CAMERA_OP_MODE_HAL3_SDK_VIP,
 };
 
 enum camera2_sensor_hdr_mode {
@@ -2226,6 +2259,10 @@ enum camera_client_index {
 	CAMERA_APP_CATEGORY_KAKAOBANK          = 13,
 	CAMERA_APP_CATEGORY_CAMCARD            = 14,
 	CAMERA_APP_CATEGORY_CAMCARD_FREE       = 15,
+	CAMERA_APP_CATEGORY_SNOW               = 16,
+	CAMERA_APP_CATEGORY_B612               = 17,
+	CAMERA_APP_CATEGORY_SODA               = 18,
+	CAMERA_APP_CATEGORY_FOODIE             = 19,
 	CAMERA_APP_CATEGORY_MAX
 };
 

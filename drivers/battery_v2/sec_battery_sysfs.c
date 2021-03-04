@@ -1891,6 +1891,9 @@ ssize_t sec_bat_store_attrs(
 		if (sscanf(buf, "%d\n", &x) == 1) {
 			if (x >= 0 && x <= 100) {
 				battery->batt_asoc = x;
+#if defined(CONFIG_BATTERY_CISD)
+				battery->cisd.data[CISD_DATA_ASOC] = x;
+#endif
 				sec_bat_check_battery_health(battery);
 			}
 			ret = count;
@@ -1952,7 +1955,7 @@ ssize_t sec_bat_store_attrs(
 				if (battery->pdata->wpc_en)
 					gpio_direction_output(battery->pdata->wpc_en, 1);
 #endif
-				pr_info("%s: WC CONTROL: Disable", __func__);
+				pr_info("@DIS_MFC %s: WC CONTROL: Disable\n", __func__);
 				mutex_unlock(&battery->wclock);
 			} else if (x == 1) {
 				mutex_lock(&battery->wclock);
@@ -1970,7 +1973,7 @@ ssize_t sec_bat_store_attrs(
 				if (battery->pdata->wpc_en)
 					gpio_direction_output(battery->pdata->wpc_en, 0);
 #endif
-				pr_info("%s: WC CONTROL: Enable", __func__);
+				pr_info("@DIS_MFC %s: WC CONTROL: Enable\n", __func__);
 				mutex_unlock(&battery->wclock);
 			} else {
 				dev_info(battery->dev,
@@ -2495,14 +2498,9 @@ ssize_t sec_bat_store_attrs(
 				pr_info("@Tx_Mode %s : skip Tx by mfc_fw_update\n", __func__);
 				return count;
 			}
-				
-			if (battery->wc_tx_enable == x) {
-				pr_info("@Tx_Mode %s : Ignore same tx status\n", __func__);
-				return count;
-			}
 
-			if (x &&
-				(is_wireless_type(battery->cable_type) || (battery->cable_type == SEC_BATTERY_CABLE_WIRELESS_FAKE))) {
+			/* x value is written by ONEUI 2.5 PMS when tx_event is changed */
+			if (x && is_wireless_fake_type(battery->cable_type)) {
 				pr_info("@Tx_Mode %s : Can't enable Tx mode during wireless charging\n", __func__);
 				return count;
 			} else {
@@ -2587,7 +2585,7 @@ ssize_t sec_bat_store_attrs(
 				} else {
 					pr_info("%s: hv wireless charging is enabled\n", __func__);
 					sleep_mode = false;
-
+					battery->auto_mode = false;
 					value.intval = WIRELESS_SLEEP_MODE_DISABLE;
 					psy_do_property(battery->pdata->wireless_charger_name, set,
 								POWER_SUPPLY_PROP_INPUT_VOLTAGE_REGULATION, value);
@@ -2664,7 +2662,7 @@ ssize_t sec_bat_store_attrs(
 	case BATT_TUNE_WIRELESS_VOUT_CURRENT:
 		{
 			int vout, input_current, offset;
-	
+
 			sscanf(buf, "%10d %10d\n", &offset, &input_current);			
 			switch(offset) {
 			case 5500:
@@ -2690,7 +2688,7 @@ ssize_t sec_bat_store_attrs(
 				vout = 0;
 				break;
 			}
-	
+
 			if(input_current >= 100 && input_current <= 4000 && vout > 0) {
 				for(i=0; i < SEC_WIRELESS_RX_POWER_MAX; i++) {
 					if(battery->pdata->wireless_power_info[i].vout != 0) {
@@ -2811,7 +2809,7 @@ ssize_t sec_bat_store_attrs(
 		sscanf(buf, "%10d\n", &x);
 		pr_info("%s dchg_high_batt_temp_recovery = %d ",__func__, x);
 		battery->pdata->dchg_high_batt_temp_recovery = x;
-		break;		
+		break;
 #if defined(CONFIG_DIRECT_CHARGING)
 	case BATT_TUNE_DCHG_LIMMIT_INPUT_CUR:
 		sscanf(buf, "%10d\n", &x);
@@ -3403,7 +3401,13 @@ ssize_t sec_bat_store_attrs(
 					pr_info("%s: pd hv charging is disabled\n", __func__);
 				}
 				sec_bat_set_current_event(battery,
-					SEC_BAT_CURRENT_EVENT_HV_DISABLE, SEC_BAT_CURRENT_EVENT_HV_DISABLE);	
+					SEC_BAT_CURRENT_EVENT_HV_DISABLE, SEC_BAT_CURRENT_EVENT_HV_DISABLE);
+
+				if (is_pd_wire_type(battery->cable_type)) {
+					battery->update_pd_list = true;
+					pr_info("%s: update pd list\n", __func__);
+					select_pdo(1);
+				}
 			} else {
 				battery->pd_disable = false;
 				ret = sec_set_param(PD_OFFSET, '0');
@@ -3416,10 +3420,18 @@ ssize_t sec_bat_store_attrs(
 				sec_bat_set_current_event(battery,
 					0, SEC_BAT_CURRENT_EVENT_HV_DISABLE);
 
-				if (battery->cable_type == SEC_BATTERY_CABLE_PDIC) {
+				if (is_pd_wire_type(battery->cable_type)) {
+					int target_pd_index = 0;
+
 					battery->update_pd_list = true;
 					pr_info("%s: update pd list\n", __func__);
-					select_pdo(battery->pd_list.pd_info[battery->pd_list.num_fpdo - 1].pdo_index);
+#if defined(CONFIG_PDIC_PD30)
+					target_pd_index = battery->pd_list.num_fpdo - 1;
+#else
+					target_pd_index = battery->pd_list.max_pd_count - 1;
+#endif
+					if (target_pd_index >= 0 && target_pd_index < MAX_PDO_NUM)
+						select_pdo(battery->pd_list.pd_info[target_pd_index].pdo_index);
 				}
 			}
 			ret = count;

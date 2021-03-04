@@ -912,10 +912,6 @@ struct task_struct {
 	unsigned long			min_flt;
 	unsigned long			maj_flt;
 
-#ifdef CONFIG_HUGEPAGE_POOL
-	int				use_hugepage_pool;
-#endif
-
 #ifdef CONFIG_POSIX_TIMERS
 	struct task_cputime		cputime_expires;
 	struct list_head		cpu_timers[3];
@@ -1278,9 +1274,6 @@ struct task_struct {
 	unsigned int			sequential_io;
 	unsigned int			sequential_io_avg;
 #endif
-#if defined(CONFIG_SDP)
-	unsigned int sensitive;
-#endif
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
 	unsigned long			task_state_change;
 #endif
@@ -1327,18 +1320,6 @@ struct task_struct {
 	 * Do not put anything below here!
 	 */
 };
-
-#ifdef CONFIG_HUGEPAGE_POOL
-static inline int get_task_use_hugepage_pool(struct task_struct *task)
-{
-	return task->use_hugepage_pool;
-}
-
-static inline void set_task_use_hugepage_pool(struct task_struct *task, int val)
-{
-	task->use_hugepage_pool = val;
-}
-#endif
 
 static inline struct pid *task_pid(struct task_struct *task)
 {

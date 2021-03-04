@@ -47,3 +47,5 @@ obj-$(CONFIG_WIRELESS_CHARGER_MFC)	+= mfc_charger.o
 obj-$(CONFIG_WIRELESS_CHARGER_MFC_S2MIW04)	+= mfc_s2miw04_charger.o
 
 obj-$(CONFIG_CHARGER_PCA9468)	+= pca9468_charger.o
+
+GCOV_PROFILE_sec_battery.o		:=y

@@ -927,8 +927,8 @@ int edid_update(u32 sst_id, struct displayport_device *displayport)
 	supported_videos[0].edid_support_match = true; /*default support VGA*/
 	supported_videos[VDUMMYTIMING].dv_timings.bt.width = 0;
 	supported_videos[VDUMMYTIMING].dv_timings.bt.height = 0;
-	supported_videos[VDUMMYTIMING].dex_support = 0;
-	supported_videos[VDUMMYTIMING].ratio = 0;
+	supported_videos[VDUMMYTIMING].dex_support = DEX_NOT_SUPPORT;
+	supported_videos[VDUMMYTIMING].ratio = RATIO_ETC;
 	for (i = 1; i < supported_videos_pre_cnt; i++)
 		supported_videos[i].edid_support_match = false;
 	if (displayport->do_unit_test) {
@@ -1089,23 +1089,15 @@ u32 edid_audio_informs(void)
 	if (audio_channels > 0)
 		ch_info = audio_channels;
 
-	/* if below conditions does not meet pro audio, then reduce sample frequency.
-	 * 1. current video is not support pro audio
-	 * 2. link rate is below HBR2
-	 * 3. dex setting is not set
-	 * 4. channel is over 2 and under 8.
-	 * 5. channel is 8. And smaple freq is under 192KHz
-	 */
-	if ((!supported_videos[displayport->sst[SST1]->cur_video].pro_audio_support ||
-				link_rate < LINK_RATE_5_4Gbps)) {
-		if ((ch_info > FB_AUDIO_1N2CH && ch_info < FB_AUDIO_8CH) ||
-				(ch_info >= FB_AUDIO_8CH && audio_sample_rates < FB_AUDIO_192KHZ)) {
-			displayport_info("reduce SF(pro_aud:%d, link_rate:0x%X, ch:0x%X, sf:0x%X)\n",
-				supported_videos[displayport->sst[SST1]->cur_video].pro_audio_support,
-				link_rate,
-					ch_info, audio_sample_rates);
-			audio_sample_rates &= 0x7; /* reduce to under 48KHz */
-		}
+	/* support 192KHz sample freq only if current timing supports pro audio */
+	if (supported_videos[displayport->sst[SST1]->cur_video].pro_audio_support &&
+		link_rate >= LINK_RATE_5_4Gbps &&
+		ch_info >= FB_AUDIO_8CH && audio_sample_rates >= FB_AUDIO_192KHZ) {
+		displayport_info("support pro audio\n");
+	} else {
+		displayport_info("reduce sample freq to 48KHz(lr:0x%X, ch:0x%X, sf:0x%X)\n",
+			link_rate, ch_info, audio_sample_rates);
+		audio_sample_rates &= 0x7; /* reduce to 48KHz */
 	}
 
 	value = ((audio_sample_rates << 19) | (audio_bit_rates << 16) |

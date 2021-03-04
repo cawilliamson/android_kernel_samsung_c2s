@@ -49,3 +49,5 @@ CFLAGS_elevator.o = -Wformat
 CFLAGS_cfq-iosched.o = -Wformat
 CFLAGS_genhd.o = -Wformat
 
+
+GCOV_PROFILE_blk-core.o	:=y

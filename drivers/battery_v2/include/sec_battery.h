@@ -115,8 +115,9 @@ extern char *sec_cable_type[];
 #define BATT_MISC_EVENT_WIRELESS_AUTH_FAIL      0x00000800
 #define BATT_MISC_EVENT_WIRELESS_AUTH_PASS      0x00001000
 #define BATT_MISC_EVENT_TEMP_HICCUP_TYPE		0x00002000
-#if defined(CONFIG_BATTERY_AGE_FORECAST)
 #define BATT_MISC_EVENT_BATTERY_HEALTH			0x000F0000
+#define BATT_MISC_EVENT_HEALTH_OVERHEATLIMIT		0x00100000
+#define BATT_MISC_EVENT_ABNORMAL_PAD		0x00200000
 
 #define BATTERY_HEALTH_SHIFT                16
 enum misc_battery_health {
@@ -129,7 +130,6 @@ enum misc_battery_health {
 	/* For event */
 	BATTERY_HEALTH_BAD = 0xF,
 };
-#endif
 
 #if defined(CONFIG_SEC_FACTORY)             // SEC_FACTORY
 #define STORE_MODE_CHARGING_MAX 80
@@ -162,6 +162,8 @@ enum misc_battery_health {
 #define SIOP_APDO_INPUT_LIMIT_CURRENT				1000
 #define SIOP_APDO_CHARGING_LIMIT_CURRENT			2000
 #endif
+
+#define SELECT_PDO_INPUT_CURRENT 1000
 
 #define WIRELESS_OTG_INPUT_CURRENT 900
 
@@ -204,7 +206,7 @@ struct sec_bat_pdic_info {
 };
 
 struct sec_bat_pdic_list {
-	struct sec_bat_pdic_info pd_info[8]; /* 5V ~ 12V */
+	struct sec_bat_pdic_info pd_info[MAX_PDO_NUM]; /* 5V ~ 12V */
 	unsigned int now_pd_index;
 	unsigned int max_pd_count;
 #if defined(CONFIG_PDIC_PD30)
@@ -588,6 +590,7 @@ struct sec_battery_info {
 	unsigned int prev_misc_event;
 	unsigned int tx_retry_case;
 	unsigned int tx_misalign_cnt;
+	unsigned int tx_ocp_cnt;
 	struct delayed_work ext_event_work;
 	struct delayed_work misc_event_work;
 	struct wake_lock ext_event_wake_lock;
@@ -600,6 +603,8 @@ struct sec_battery_info {
 	struct mutex init_soc_updatelock;
 	unsigned long tx_misalign_start_time;
 	unsigned long tx_misalign_passed_time;
+	unsigned long tx_ocp_start_time;
+	unsigned long tx_ocp_passed_time;
 
 	unsigned int hiccup_status;
 	bool hiccup_clear;
@@ -615,6 +620,8 @@ struct sec_battery_info {
 	int ta_alert_mode;
 
 	bool boot_complete;
+
+	bool support_unknown_wpcthm;
 };
 
 /* event check */
@@ -708,5 +715,7 @@ int sec_bat_parse_dt(struct device *dev, struct sec_battery_info *battery);
 void sec_bat_parse_mode_dt(struct sec_battery_info *battery);
 void sec_bat_parse_mode_dt_work(struct work_struct *work);
 u8 sec_bat_get_wireless20_power_class(struct sec_battery_info *battery);
-
+#if defined(CONFIG_DISABLE_MFC_IC)
+void sec_bat_set_mfc_on(struct sec_battery_info *battery);
+#endif
 #endif /* __SEC_BATTERY_H */

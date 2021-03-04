@@ -712,7 +712,7 @@ int is_last_session_ref(struct proto_req_nw *req_nw)
 
 	sess_entry = find_session_ref_nw(req_nw);
 	if (sess_entry == NULL) {
-		npu_uerr("cannot found session ref.\n", nw);
+		npu_uwarn("cannot found session ref.\n", nw);
 		return 0;
 	}
 	/* No frame shall be associated */
@@ -1185,10 +1185,12 @@ static int nw_mgmt_op_put_result(const struct proto_req_nw *src)
 
 	/* Invoke callback registered on npu_nw object with result code */
 	ret = npu_ncp_mgmt_save_result(src->nw.notify_func, src->nw.session, result);
-	if (ret)
+	if (ret) {
 		npu_uerr("error(%d) in npu_ncp_mgmt_save_result\n", &src->nw, ret);
+		return ret;
+	}
 
-	return 1;
+	return 0;
 }
 
 /* frame_proc_ops -> Use functions in npu-if-session-protodrv */
@@ -1733,10 +1735,6 @@ static int npu_protodrv_handler_frame_completed(void)
 			npu_uferr("unlink_session_frame failed : %d\n", &entry->frame, ret);
 		}
 
-		if (entry->frame.output->profiler->level == 1) {
-			entry->frame.output->profiler->node->duration = entry->frame.duration;
-		}
-
 		/* Time keeping */
 		npu_ufdbg("(COMPLETED)frame: cmd(%u) / req_id(%d) / result(%u/0x%08x) NPU-TIMESTAT:%s\n",
 			&entry->frame, entry->frame.cmd, entry->frame.npu_req_id,
@@ -1906,7 +1904,7 @@ static int npu_protodrv_handler_nw_completed(void)
 				entry->nw.npu_req_id, entry->nw.result_code, entry->nw.result_code,
 				__print_npu_timestamp(&entry->ts, stat_buf, TIME_STAT_BUF_LEN));
 
-			if (nw_mgmt_op_put_result(entry) > 0) {
+			if (!nw_mgmt_op_put_result(entry)) {
 				npu_uinfo("(COMPLETED)NW: notification sent result(0x%08x)\n",
 					&entry->nw, entry->nw.result_code);
 			} else {
@@ -2436,11 +2434,11 @@ static ssize_t proto_drv_dump_status(char *outbuf, const size_t len)
 	/* Collect statistics */
 	if (retrive_lsm_stat(&frame_stat, &proto_frame_lsm_getinfo_ops) != 0) {
 		npu_err("fail in retrive_lsm_stat(FRAME)");
-		return 0;
+		return -EFAULT;
 	}
 	if (retrive_lsm_stat(&nw_stat, &proto_nw_lsm_getinfo_ops) != 0) {
 		npu_err("fail retrive_lsm_stat(NW).");
-		return 0;
+		return -EFAULT;
 	}
 
 	/* Print stat for Frame LSM */

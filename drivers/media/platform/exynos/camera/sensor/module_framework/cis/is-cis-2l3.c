@@ -529,7 +529,6 @@ int sensor_2l3_cis_log_status(struct v4l2_subdev *subdev)
 	struct i2c_client *client = NULL;
 	u8 data8 = 0;
 	u16 data16 = 0;
-	u64 vt_pix_clk = 0;
 
 	WARN_ON(!subdev);
 
@@ -549,71 +548,33 @@ int sensor_2l3_cis_log_status(struct v4l2_subdev *subdev)
 
 	I2C_MUTEX_LOCK(cis->i2c_lock);
 
-	pr_info("[SEN:DUMP] *******************************\n");
+	pr_info("[%s] *******************************\n", __func__);
+	/* 4000 page */
+	ret = is_sensor_read16(client, 0x0000, &data16);
+	if (unlikely(!ret)) pr_info("model_id(0x%x)\n", data16); else goto i2c_err;
+	ret = is_sensor_read16(client, 0x0002, &data16);
+	if (unlikely(!ret)) pr_info("revision_number(0x%x)\n", data16); else goto i2c_err;
+	ret = is_sensor_read8(client, 0x0005, &data8);
+	if (unlikely(!ret)) pr_info("frame_count(0x%x)\n", data8); else goto i2c_err;
+	ret = is_sensor_read8(client, 0x0100, &data8);
+	if (unlikely(!ret)) pr_info("0x0100(0x%x)\n", data8); else goto i2c_err;
+	ret = is_sensor_read16(client, 0x0340, &data16);
+	if (unlikely(!ret)) pr_info("0x0340(0x%x)\n", data16); else goto i2c_err;
+	ret = is_sensor_read16(client, 0x021E, &data16);
+	if (unlikely(!ret)) pr_info("0x021E(0x%x)\n", data16); else goto i2c_err;
+	ret = is_sensor_read16(client, 0x0202, &data16);
+	if (unlikely(!ret)) pr_info("0x0202(0x%x)\n", data16); else goto i2c_err;
+	ret = is_sensor_read16(client, 0x0226, &data16);
+	if (unlikely(!ret)) pr_info("0x0226(0x%x)\n", data16); else goto i2c_err;
+	ret = is_sensor_read16(client, 0x0702, &data16);
+	if (unlikely(!ret)) pr_info("0x0702(0x%x)\n", data16); else goto i2c_err;
+	ret = is_sensor_read16(client, 0x0204, &data16);
+	if (unlikely(!ret)) pr_info("0x0204(0x%x)\n", data16); else goto i2c_err;
+	ret = is_sensor_read16(client, 0x020E, &data16);
+	if (unlikely(!ret)) pr_info("0x020E(0x%x)\n", data16); else goto i2c_err;
 
-	is_sensor_read16(client, 0x0000, &data16);
-	pr_info("[SEN:DUMP] model_id(%x)\n", data16);
-	is_sensor_read8(client, 0x0002, &data8);
-	pr_info("[SEN:DUMP] revision_number(%x)\n", data8);
-	is_sensor_read8(client, 0x0005, &data8);
-	pr_info("[SEN:DUMP] frame_count(%x)\n", data8);
-	is_sensor_read8(client, 0x0100, &data8);
-	pr_info("[SEN:DUMP] mode_select(%x)\n", data8);
-
-	vt_pix_clk = (EXT_CLK_Mhz * 1000 * 1000); /* ext_clk */
-
-	is_sensor_read16(client, 0x0306, &data16);
-	pr_info("[SEN:DUMP] vt_pll_multiplier(%x)\n", data16);
-	vt_pix_clk *= data16;
-
-	is_sensor_read16(client, 0x0304, &data16);
-	pr_info("[SEN:DUMP] vt_pre_pll_clk_div(%x)\n", data16);
-	vt_pix_clk /= data16;
-
-	is_sensor_read16(client, 0x0302, &data16);
-	pr_info("[SEN:DUMP] vt_sys_clk_div(%x)\n", data16);
-	vt_pix_clk /= data16;
-
-	is_sensor_read16(client, 0x0300, &data16);
-	pr_info("[SEN:DUMP] vt_pix_clk_div(%x)\n", data16);
-	vt_pix_clk /= data16;
-
-	is_sensor_read16(client, 0x030C, &data16);
-	pr_info("[SEN:DUMP] pll_post_scalar(%x)\n", data16);
-
-	pr_info("[SEN:DUMP] vt_pix_clk(%lld)\n", vt_pix_clk);
-
-	is_sensor_read16(client, 0x0340, &data16);
-	pr_info("[SEN:DUMP] frame_length_lines(%x)\n", data16);
-	is_sensor_read16(client, 0x0342, &data16);
-	pr_info("[SEN:DUMP] ine_length_pck(%x)\n", data16);
-
-	is_sensor_read16(client, 0x0202, &data16);
-	pr_info("[SEN:DUMP] coarse_integration_time(%x)\n", data16);
-	is_sensor_read16(client, 0x1004, &data16);
-	pr_info("[SEN:DUMP] coarse_integration_time_min(%x)\n", data16);
-	is_sensor_read16(client, 0x1006, &data16);
-	pr_info("[SEN:DUMP] coarse_integration_time_max_margin(%x)\n", data16);
-
-	is_sensor_read16(client, 0x0200, &data16);
-	pr_info("[SEN:DUMP] fine_integration_time(%x)\n", data16);
-	is_sensor_read16(client, 0x1008, &data16);
-	pr_info("[SEN:DUMP] fine_integration_time_min(%x)\n", data16);
-	is_sensor_read16(client, 0x100A, &data16);
-	pr_info("[SEN:DUMP] fine_integration_time_max_margin(%x)\n", data16);
-
-	is_sensor_read16(client, 0x0084, &data16);
-	pr_info("[SEN:DUMP] analogue_gain_code_min(%x)\n", data16);
-	is_sensor_read16(client, 0x0086, &data16);
-	pr_info("[SEN:DUMP] analogue_gain_code_max(%x)\n", data16);
-	is_sensor_read16(client, 0x1084, &data16);
-	pr_info("[SEN:DUMP] digital_gain_min(%x)\n", data16);
-	is_sensor_read16(client, 0x1086, &data16);
-	pr_info("[SEN:DUMP] digital_gain_max(%x)\n", data16);
-
-	pr_info("[SEN:DUMP] *******************************\n");
+i2c_err:
 	I2C_MUTEX_UNLOCK(cis->i2c_lock);
-
 p_err:
 	return ret;
 }
@@ -863,9 +824,11 @@ int sensor_2l3_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 		if (test_bit(IS_SENSOR_OPEN, &(core->sensor[0].state))) {
 			info("[%s] dual sync slave mode\n", __func__);
 			ret = sensor_cis_set_registers(subdev, sensor_2l3_dualsync_slave, sensor_2l3_dualsync_slave_size);
+			cis->cis_data->dual_slave = true;
 		} else {
 			info("[%s] dual sync single mode\n", __func__);
 			ret = sensor_cis_set_registers(subdev, sensor_2l3_dualsync_single, sensor_2l3_dualsync_single_size);
+			cis->cis_data->dual_slave = false;
 		}
 
 		if (ret < 0) {
@@ -2529,6 +2492,9 @@ int sensor_2l3_cis_long_term_exposure(struct v4l2_subdev *subdev)
 	struct is_long_term_expo_mode *lte_mode;
 	unsigned char cit_lshift_val = 0;
 	unsigned char shift_count = 0;
+#ifdef USE_SENSOR_LONG_EXPOSURE_SHOT
+	u32 lte_expousre = 0;
+#endif
 
 	WARN_ON(!subdev);
 
@@ -2539,6 +2505,16 @@ int sensor_2l3_cis_long_term_exposure(struct v4l2_subdev *subdev)
 	/* LTE mode or normal mode set */
 	if (lte_mode->sen_strm_off_on_enable) {
 		if (lte_mode->expo[0] > 125000) {
+#ifdef USE_SENSOR_LONG_EXPOSURE_SHOT
+			lte_expousre = lte_mode->expo[0];
+			cit_lshift_val = (unsigned char)(lte_mode->expo[0] / 125000);
+			while (cit_lshift_val) {
+				cit_lshift_val = cit_lshift_val / 2;
+				lte_expousre = lte_expousre / 2;
+				shift_count++;
+			}
+			lte_mode->expo[0] = lte_expousre;
+#else
 			cit_lshift_val = (unsigned char)(lte_mode->expo[0] / 125000);
 			while (cit_lshift_val) {
 				cit_lshift_val = cit_lshift_val / 2;
@@ -2546,6 +2522,7 @@ int sensor_2l3_cis_long_term_exposure(struct v4l2_subdev *subdev)
 					shift_count++;
 			}
 			lte_mode->expo[0] = 125000;
+#endif
 			ret |= is_sensor_write16(cis->client, 0xFCFC, 0x4000);
 			ret |= is_sensor_write8(cis->client, 0x0701, shift_count);
 			ret |= is_sensor_write8(cis->client, 0x0702, shift_count);
@@ -2559,7 +2536,8 @@ int sensor_2l3_cis_long_term_exposure(struct v4l2_subdev *subdev)
 
 	I2C_MUTEX_UNLOCK(cis->i2c_lock);
 
-	info("%s enable(%d)", __func__, lte_mode->sen_strm_off_on_enable);
+	info("%s enable(%d) shift_count(%d) exp(%d)",
+		__func__, lte_mode->sen_strm_off_on_enable, shift_count, lte_mode->expo[0]);
 
 	if (ret < 0) {
 		pr_err("ERR[%s]: LTE register setting fail\n", __func__);

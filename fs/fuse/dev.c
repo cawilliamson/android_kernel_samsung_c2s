@@ -14,6 +14,7 @@
 #include <linux/sched/signal.h>
 #include <linux/uio.h>
 #include <linux/miscdevice.h>
+#include <linux/namei.h>
 #include <linux/pagemap.h>
 #include <linux/file.h>
 #include <linux/slab.h>
@@ -60,6 +61,8 @@ static struct fuse_req *__fuse_request_alloc(unsigned npages, gfp_t flags)
 		struct page **pages;
 		struct fuse_page_desc *page_descs;
 
+		/* @fs.sec -- 5da784cce4308ae10a79e3c8c41b13fb9568e4e0 -- */
+		WARN_ON(npages > FUSE_MAX_MAX_PAGES);
 		if (npages <= FUSE_REQ_INLINE_PAGES) {
 			pages = req->inline_pages;
 			page_descs = req->inline_page_descs;
@@ -150,6 +153,7 @@ static struct fuse_req *__fuse_get_req(struct fuse_conn *fc, unsigned npages,
 
 	if (fuse_block_alloc(fc, for_background)) {
 		err = -EINTR;
+		/* @fs.sec -- 9992f9e9ebd25b0dcc80951a9e4f4fc2e71a08c6 -- */
 		if (fuse_wait_event_killable_exclusive(fc->blocked_waitq,
 				!fuse_block_alloc(fc, for_background)))
 			goto out;
@@ -1250,6 +1254,12 @@ static ssize_t fuse_dev_do_read(struct fuse_dev *fud, struct file *file,
 	struct fuse_in *in;
 	unsigned reqsize;
 
+	if ((current->flags & PF_NOFREEZE) == 0) {
+		current->flags |= PF_NOFREEZE;
+		printk_ratelimited(KERN_WARNING "%s(%d): This thread should not be frozen\n",
+				current->comm, task_pid_nr(current));
+	}
+
  restart:
 	for (;;) {
 		spin_lock(&fiq->lock);
@@ -1679,7 +1689,7 @@ static int fuse_retrieve(struct fuse_conn *fc, struct inode *inode,
 	unsigned int num;
 	unsigned int offset;
 	size_t total_len = 0;
-	int num_pages;
+	unsigned int num_pages;
 
 	offset = outarg->offset & ~PAGE_MASK;
 	file_size = i_size_read(inode);
@@ -1691,7 +1701,7 @@ static int fuse_retrieve(struct fuse_conn *fc, struct inode *inode,
 		num = file_size - outarg->offset;
 
 	num_pages = (num + offset + PAGE_SIZE - 1) >> PAGE_SHIFT;
-	num_pages = min(num_pages, FUSE_MAX_PAGES_PER_REQ);
+	num_pages = min(num_pages, fc->max_pages);
 
 	req = fuse_get_req(fc, num_pages);
 	if (IS_ERR(req))
@@ -1922,6 +1932,12 @@ static ssize_t fuse_dev_do_write(struct fuse_dev *fud,
 		cs->move_pages = 0;
 
 	err = copy_out_args(cs, &req->out, nbytes);
+	if (req->in.h.opcode == FUSE_CANONICAL_PATH) {
+		char *path = (char *)req->out.args[0].value;
+
+		path[req->out.args[0].size - 1] = 0;
+		req->out.h.error = kern_path(path, 0, req->canonical_path);
+	}
 	fuse_copy_finish(cs);
 
 	spin_lock(&fpq->lock);
@@ -2120,6 +2136,9 @@ static void end_polls(struct fuse_conn *fc)
 void fuse_abort_conn(struct fuse_conn *fc, bool is_abort)
 {
 	struct fuse_iqueue *fiq = &fc->iq;
+
+	ST_LOG("<%s> dev = %u:%u  fuse abort all requests",
+			__func__, MAJOR(fc->dev), MINOR(fc->dev));
 
 	spin_lock(&fc->lock);
 	if (fc->connected) {
